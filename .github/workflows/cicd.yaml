@@ -54,7 +54,6 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          echo SERVICE_NAME $SERVICE_NAME
           gcloud run deploy $SERVICE_NAME \
             --image ${{ env.DOCKER_IMAGE_URL }}:latest \
             --platform managed \
@@ -63,4 +62,6 @@ jobs:
             --service-account=deploy-langchain-agente-inmobi@datapath-ai17-adriana-alvarez.iam.gserviceaccount.com \
             --timeout=3600 \
             --memory=2Gi \
-            --cpu=2
+            --cpu=2 \
+            --set-env-vars PORT=8080 \
+            --startup-probe-timeout=600

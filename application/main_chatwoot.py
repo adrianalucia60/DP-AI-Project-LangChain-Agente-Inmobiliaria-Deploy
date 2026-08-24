@@ -19,11 +19,11 @@ load_dotenv(find_dotenv())
 # Agregar el directorio actual al path (portable para despliegue)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Importar directamente el agente (sin rutas locales)
-from agent import chat_con_agente, tools
+# ✅ LAZY LOAD: No importar el agente aquí, hacerlo después
+chat_con_agente = None
+tools = []
 
-print("🤖 Cargando Agente Alpha State (Qdrant)...")
-print("✅ Agente Alpha State cargado correctamente")
+print("🤖 Inicializando aplicación (sin cargar agente aún)...")
 
 # ============================================
 # CONFIGURACIÓN DE CHATWOOT
@@ -112,6 +112,15 @@ def conversation_id_to_uuid(conversation_id: int) -> str:
     """
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"chatwoot-{conversation_id}"))
 
+def load_agent():
+    """Carga el agente de forma lazy (solo cuando se necesita)."""
+    global chat_con_agente, tools
+    if chat_con_agente is None:
+        print("🤖 Cargando Agente Alpha State (Qdrant)...")
+        from agent import chat_con_agente as _chat, tools as _tools
+        chat_con_agente = _chat
+        tools = _tools
+        print("✅ Agente Alpha State cargado correctamente")
 
 # ============================================
 # FASTAPI APP
