@@ -62,5 +62,4 @@ jobs:
             --service-account=deploy-langchain-agente-inmobi@datapath-ai17-adriana-alvarez.iam.gserviceaccount.com \
             --timeout=3600 \
             --memory=2Gi \
-            --cpu=2 \
-            --set-env-vars PORT=8080
+            --cpu=2
