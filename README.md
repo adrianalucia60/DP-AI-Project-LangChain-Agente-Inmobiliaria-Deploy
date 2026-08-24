@@ -32,12 +32,12 @@ El servicio que se expone es el **webhook de Chatwoot** (`main_chatwoot.py`).
 │   └── .env.example                #   Plantilla de variables
 │
 ├── requirements.txt                # Dependencias (en la raíz: lo pide Dockerfile.prod)
-├── Dockerfile.prod                 # Imagen de producción → uvicorn en el puerto 4000
+├── Dockerfile.prod                 # Imagen de producción → uvicorn en el puerto 8080
 ├── Dockerfile.dev                  # Imagen del devcontainer (VS Code)
 ├── .dockerignore                   # Deja la ingesta y los PDFs fuera de la imagen
 │
 ├── cloudbuild.yaml                 # Build + push a Artifact Registry
-├── service.yaml                    # Servicio de Cloud Run (containerPort 4000)
+├── service.yaml                    # Servicio de Cloud Run (containerPort 8080)
 ├── gcr-service-policy.yaml         # Acceso público (allUsers → run.invoker)
 │
 ├── Comandos-deploy-GCP.md          # Pasos de despliegue en Google Cloud Run
