@@ -1,0 +1,53 @@
+# ============================================
+# Contexto de build de Dockerfile.prod
+# Autor: Ing. Kevin Inofuente Colque - DataPath
+# ============================================
+# OJO: application/.env y application/credentials/ NO se excluyen a propósito.
+# El código llama a load_dotenv(find_dotenv()) y resuelve el JSON de la cuenta
+# de servicio contra application/, así que ambos tienen que viajar en la imagen.
+# Si algún día mueves los secretos a variables de Cloud Run o Secret Manager,
+# agrégalos acá y quítalos del COPY.
+
+# ============================================
+# Ingesta del RAG — proceso offline, no lo corre el servicio
+# ============================================
+# Se ejecuta una vez desde tu máquina (python rag.py) para indexar en Qdrant.
+# Fuera de la imagen: son ~MB de PDFs que el webhook nunca lee.
+application/RAG-Clasico-con-Qdrant/
+
+# ============================================
+# Entorno de desarrollo
+# ============================================
+.devcontainer/
+Dockerfile.dev
+
+# ============================================
+# Manifiestos de despliegue (los usa gcloud, no el build)
+# ============================================
+cloudbuild.yaml
+service.yaml
+gcr-service-policy.yaml
+Comandos-deploy-*.md
+
+# ============================================
+# Python
+# ============================================
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ============================================
+# Git / IDEs / Sistema
+# ============================================
+.git/
+.gitignore
+.vscode/
+.idea/
+**/.DS_Store
+Thumbs.db
