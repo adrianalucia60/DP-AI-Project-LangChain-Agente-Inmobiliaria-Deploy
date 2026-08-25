@@ -11,6 +11,7 @@ Autor: Lic. Adriana Alvarez
 """
 
 import os
+import logging
 import unicodedata
 from typing import Optional
 
@@ -21,6 +22,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 load_dotenv(find_dotenv())
+
+logger = logging.getLogger("alpha_state.google_sheets_inmuebles")
 
 # ============================================
 # CONFIGURACIÓN
@@ -42,6 +45,7 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 if not GOOGLE_SHEET_ID:
+    logger.error("Falta la variable GOOGLE_SHEET_ID2")
     raise ValueError(
         "❌ Falta variable GOOGLE_SHEET_ID en .env"
     )
@@ -68,6 +72,12 @@ def _get_worksheet():
         return _worksheet
 
     creds_path = _resolve_credentials_path(GOOGLE_APPLICATION_CREDENTIALS)
+    logger.info(
+        "Conectando a Google Sheets de inmuebles: worksheet=%s header_row=%s credentials_file=%s",
+        GOOGLE_SHEETS_WORKSHEET,
+        GOOGLE_SHEETS_HEADER_ROW,
+        os.path.basename(creds_path),
+    )
     if not os.path.isfile(creds_path):
         raise FileNotFoundError(
             f"No se encontró el JSON de la cuenta de servicio en '{creds_path}'. "
@@ -78,6 +88,7 @@ def _get_worksheet():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(GOOGLE_SHEET_ID)
     _worksheet = sheet.worksheet(GOOGLE_SHEETS_WORKSHEET)
+    logger.info("Conexión a Google Sheets de inmuebles establecida: worksheet=%s", GOOGLE_SHEETS_WORKSHEET)
     return _worksheet
 
 
@@ -141,6 +152,7 @@ def _cargar_datos():
         headers = [(h or "").strip() or "Columna" for h in header_row]
     headers = _dedup_headers(headers)
     data_rows = [r for r in all_values[header_idx + 1:] if any(c.strip() for c in r)]
+    logger.info("Datos de inmuebles cargados: columnas=%s filas=%s", len(headers), len(data_rows))
     return headers, data_rows
 
 
@@ -261,7 +273,7 @@ def consultar_tipo_inmueble(identificador: str) -> str:
         identificador: ID exacto de la columna "ID Inmueble", o "lista" para
                        consultar los tipos disponibles.
     """
-    print(f"   🏠 Consultando tipo de inmueble para: '{identificador}'")
+    logger.info("Consultando tipo de inmueble: identificador=%s", identificador)
     try:
         headers, rows = _cargar_datos()
         if _normalize(identificador) in {"lista", "listas", "tipos", "todos"}:
@@ -284,6 +296,7 @@ def consultar_tipo_inmueble(identificador: str) -> str:
         tipo = fila.get(headers[idx_tipo], "")
         return f"Tipo de inmueble: {tipo}" if tipo else "No encontré el tipo de inmueble registrado."
     except Exception as e:
+        logger.exception("Error consultando tipo de inmueble: identificador=%s", identificador)
         return f"Error al consultar Google Sheets: {str(e)}"
 
 
@@ -299,7 +312,7 @@ def consultar_alquiler_inmueble(identificador: str) -> str:
     Args:
         identificador: Valor de la columna "ID Inmueble", por ejemplo "BH-001".
     """
-    print(f"   🏠 Consultando alquiler de inmueble para: '{identificador}'")
+    logger.info("Consultando alquiler de inmueble: identificador=%s", identificador)
     try:
         headers, rows = _cargar_datos()
         fila = _buscar_fila_inmueble(rows, headers, identificador)
@@ -314,6 +327,7 @@ def consultar_alquiler_inmueble(identificador: str) -> str:
         alquiler = fila.get(headers[idx_alquiler], "")
         return f"Alquiler del inmueble: {alquiler}" if alquiler else "No encontré el alquiler registrado."
     except Exception as e:
+        logger.exception("Error consultando alquiler de inmueble: identificador=%s", identificador)
         return f"Error al consultar Google Sheets: {str(e)}"
 
 
@@ -335,10 +349,12 @@ def buscar_inmuebles(
     - habitaciones="2", banos="1"
     - metros_cuadrados="65"
     """
-    print(
-        "   🏠 Buscando inmuebles: "
-        f"barrio='{barrio}', metros='{metros_cuadrados}', "
-        f"habitaciones='{habitaciones}', banos='{banos}'"
+    logger.info(
+        "Buscando inmuebles: barrio=%s metros=%s habitaciones=%s banos=%s",
+        barrio,
+        metros_cuadrados,
+        habitaciones,
+        banos,
     )
     if not any((barrio, metros_cuadrados, habitaciones, banos)):
         return "Indica al menos un filtro: barrio, metros cuadrados, habitaciones o baños."
@@ -369,4 +385,5 @@ def buscar_inmuebles(
             )
         return "\n".join(partes)
     except Exception as e:
+        logger.exception("Error buscando inmuebles")
         return f"Error al consultar Google Sheets: {str(e)}"

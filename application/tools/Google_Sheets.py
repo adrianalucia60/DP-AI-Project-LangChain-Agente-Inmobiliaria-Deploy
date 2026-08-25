@@ -12,6 +12,7 @@ Autor: Ing. Kevin Inofuente Colque - DataPath
 
 import os
 import re
+import logging
 import unicodedata
 from typing import Optional
 
@@ -22,6 +23,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 load_dotenv(find_dotenv())
+
+logger = logging.getLogger("alpha_state.google_sheets")
 
 # ============================================
 # CONFIGURACIÓN
@@ -44,6 +47,7 @@ GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 if not GOOGLE_SHEET_ID:
+    logger.error("Falta la variable GOOGLE_SHEET_ID")
     raise ValueError(
         "❌ Falta variable GOOGLE_SHEET_ID en .env"
     )
@@ -70,6 +74,12 @@ def _get_worksheet():
         return _worksheet
 
     creds_path = _resolve_credentials_path(GOOGLE_APPLICATION_CREDENTIALS)
+    logger.info(
+        "Conectando a Google Sheets: worksheet=%s header_row=%s credentials_file=%s",
+        GOOGLE_SHEETS_WORKSHEET,
+        GOOGLE_SHEETS_HEADER_ROW,
+        os.path.basename(creds_path),
+    )
     if not os.path.isfile(creds_path):
         raise FileNotFoundError(
             f"No se encontró el JSON de la cuenta de servicio en '{creds_path}'. "
@@ -80,6 +90,7 @@ def _get_worksheet():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(GOOGLE_SHEET_ID)
     _worksheet = sheet.worksheet(GOOGLE_SHEETS_WORKSHEET)
+    logger.info("Conexión a Google Sheets establecida: worksheet=%s", GOOGLE_SHEETS_WORKSHEET)
     return _worksheet
 
 
@@ -167,6 +178,7 @@ def _cargar_datos():
         headers = [(h or "").strip() or "Columna" for h in header_row]
     headers = _dedup_headers(headers)
     data_rows = [r for r in all_values[header_idx + 1:] if any(c.strip() for c in r)]
+    logger.info("Datos cargados desde Google Sheets: columnas=%s filas=%s", len(headers), len(data_rows))
     return headers, data_rows
 
 
@@ -259,7 +271,7 @@ def consultar_total_inquilino(identificador: str) -> str:
         identificador: Nombre completo o parcial del locatario, o identificador
                        de su unidad. Ejemplos: "Juan Pérez", "Juan", "301".
     """
-    print(f"   🏢 Consultando total para: '{identificador}'")
+    logger.info("Consultando total de inquilino: identificador=%s", identificador)
     try:
         headers, rows = _cargar_datos()
         fila = _buscar_fila_inquilino(rows, headers, identificador)
@@ -288,6 +300,7 @@ def consultar_total_inquilino(identificador: str) -> str:
             )
         return "\n".join(partes)
     except Exception as e:
+        logger.exception("Error consultando total de inquilino: identificador=%s", identificador)
         return f"Error al consultar Google Sheets: {str(e)}"
 
 
@@ -308,7 +321,7 @@ def consultar_desglose_inquilino(identificador: str) -> str:
         identificador: Nombre completo o parcial del locatario, o identificador
                        de su unidad. Ejemplos: "Juan Pérez", "Juan", "301".
     """
-    print(f"   🏢 Consultando desglose para: '{identificador}'")
+    logger.info("Consultando desglose de inquilino: identificador=%s", identificador)
     try:
         headers, rows = _cargar_datos()
         fila = _buscar_fila_inquilino(rows, headers, identificador)
@@ -353,4 +366,5 @@ def consultar_desglose_inquilino(identificador: str) -> str:
 
         return "\n".join(partes)
     except Exception as e:
+        logger.exception("Error consultando desglose de inquilino: identificador=%s", identificador)
         return f"Error al consultar Google Sheets: {str(e)}"

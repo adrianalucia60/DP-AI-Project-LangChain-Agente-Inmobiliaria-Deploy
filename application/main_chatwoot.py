@@ -8,10 +8,18 @@ Autor: Ing. Kevin Inofuente Colque - DataPath
 import os
 import sys
 import uuid
+import logging
 import requests
 from dotenv import load_dotenv, find_dotenv
 from fastapi import FastAPI, Request
 import uvicorn
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("alpha_state.chatwoot")
 
 # Cargar variables de entorno
 load_dotenv(find_dotenv())
@@ -23,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 chat_con_agente = None
 tools = []
 
-print("🤖 Inicializando aplicación (sin cargar agente aún)...")
+logger.info("Inicializando aplicación; carga del agente diferida")
 
 # ============================================
 # CONFIGURACIÓN DE CHATWOOT
@@ -38,10 +46,12 @@ BOT_LABEL = os.getenv("CHATWOOT_BOT_LABEL", "atiende-ia")
 TAG_IA_OFF = "ia-off"
 
 if not all([CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_TOKEN]):
-    print("⚠️  ADVERTENCIA: Faltan variables de Chatwoot en .env")
-    print("   Requeridas: CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_ACCESS_TOKEN")
+    logger.warning(
+        "Faltan variables de Chatwoot; requeridas: "
+        "CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_ACCESS_TOKEN"
+    )
 else:
-    print(f"✅ Chatwoot configurado: {CHATWOOT_BASE_URL}")
+    logger.info("Chatwoot configurado en %s", CHATWOOT_BASE_URL)
 
 # ============================================
 # FUNCIONES DE CHATWOOT
@@ -70,10 +80,10 @@ def send_chatwoot_message(conversation_id: int, message: str) -> bool:
     try:
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        print(f"   ✅ Mensaje enviado a conversación {conversation_id}")
+        logger.info("Mensaje enviado a conversación %s", conversation_id)
         return True
     except requests.exceptions.RequestException as e:
-        print(f"   ❌ Error al enviar mensaje: {e}")
+        logger.exception("Error al enviar mensaje a conversación %s", conversation_id)
         return False
 
 
@@ -98,10 +108,10 @@ def update_chatwoot_labels(conversation_id: int, labels: list) -> bool:
     try:
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        print(f"   ✅ Etiquetas actualizadas: {labels}")
+        logger.info("Etiquetas actualizadas en conversación %s", conversation_id)
         return True
     except requests.exceptions.RequestException as e:
-        print(f"   ❌ Error al actualizar etiquetas: {e}")
+        logger.exception("Error al actualizar etiquetas en conversación %s", conversation_id)
         return False
 
 
@@ -116,11 +126,15 @@ def load_agent():
     """Carga el agente de forma lazy (solo cuando se necesita)."""
     global chat_con_agente, tools
     if chat_con_agente is None:
-        print("🤖 Cargando Agente Alpha State (Qdrant)...")
-        from agent import chat_con_agente as _chat, tools as _tools
-        chat_con_agente = _chat
-        tools = _tools
-        print("✅ Agente Alpha State cargado correctamente")
+        logger.info("Cargando agente Alpha State y sus dependencias")
+        try:
+            from agent import chat_con_agente as _chat, tools as _tools
+            chat_con_agente = _chat
+            tools = _tools
+            logger.info("Agente cargado correctamente; herramientas=%s", len(tools))
+        except Exception:
+            logger.exception("No se pudo cargar el agente")
+            raise
 
 # ============================================
 # FASTAPI APP
@@ -151,11 +165,13 @@ async def chatwoot_webhook(request: Request):
     sender_type = sender.get('type', '')
     
     # Debug
-    print(f"\n{'='*60}")
-    print(f"📩 Webhook recibido: {event}")
-    print(f"   Conversación: {conversation_id}")
-    print(f"   Tipo: {message_type}")
-    print(f"   Etiquetas: {labels}")
+    logger.info(
+        "Webhook recibido: event=%s conversation_id=%s message_type=%s labels=%s",
+        event,
+        conversation_id,
+        message_type,
+        labels,
+    )
     
     # Solo procesar mensajes entrantes (del usuario, no del bot)
     if event != 'message_created':
@@ -166,18 +182,18 @@ async def chatwoot_webhook(request: Request):
     
     # No responder si el usuario/conversación tiene el tag "ia-off"
     if TAG_IA_OFF in labels:
-        print(f"   ⏭️  Ignorado: tiene tag '{TAG_IA_OFF}' (IA desactivada)")
+        logger.info("Webhook ignorado: etiqueta '%s'", TAG_IA_OFF)
         return {"status": "ignored", "reason": f"User has tag '{TAG_IA_OFF}'"}
     
     if not message_content or not conversation_id:
         return {"status": "ignored", "reason": "Missing content or conversation_id"}
     
-    print(f"   📝 Mensaje: {message_content[:100]}...")
+    logger.info("Mensaje recibido: caracteres=%s", len(message_content))
     
     # Detectar si el usuario quiere hablar con un humano
     human_keywords = ['humano', 'persona', 'asesor', 'agente', 'representante', 'hablar con alguien']
     if any(keyword in message_content.lower() for keyword in human_keywords):
-        print(f"   🗣️ Transferencia a humano detectada")
+        logger.info("Transferencia a humano detectada: conversation_id=%s", conversation_id)
         
         # Actualizar etiquetas
         new_labels = [l for l in labels if l != BOT_LABEL]
@@ -192,17 +208,17 @@ async def chatwoot_webhook(request: Request):
     
     # Procesar con el agente
     try:
-        print(f"   🤖 Procesando con el agente...")
+        logger.info("Procesando conversación %s con el agente", conversation_id)
         load_agent()
         
         # Convertir conversation_id a UUID para el historial
         session_id = conversation_id_to_uuid(conversation_id)
-        print(f"   📝 Session ID: {session_id[:8]}...")
+        logger.info("Historial seleccionado para conversación %s", conversation_id)
         
         # Llamar al agente
         respuesta = chat_con_agente(message_content, session_id)
         
-        print(f"   ✅ Respuesta generada ({len(respuesta)} chars)")
+        logger.info("Respuesta generada: caracteres=%s", len(respuesta))
         
         # Enviar respuesta a Chatwoot
         send_chatwoot_message(conversation_id, respuesta)
@@ -210,11 +226,7 @@ async def chatwoot_webhook(request: Request):
         return {"status": "success", "action": "agent_response"}
         
     except Exception as e:
-        print(f"   ❌ Error al procesar: {e}")
-
-          # PARA VER EL DIAGNÓSTICO DETALLADO EN CLOUD RUN
-        import traceback
-        traceback.print_exc() 
+        logger.exception("Error al procesar conversación %s", conversation_id)
 
         # Enviar mensaje de error
         error_message = "Disculpa, tuve un problema al procesar tu consulta. Un asesor te atenderá pronto."
@@ -233,6 +245,7 @@ def read_root():
         "model": "GPT-4.1",
         "tools": [t.name for t in tools],
         "chatwoot_configured": all([CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_TOKEN]),
+        "agent_loaded": chat_con_agente is not None,
         "bot_label": BOT_LABEL,
         "status": "ready"
     }
@@ -244,6 +257,7 @@ def health_check():
     return {
         "status": "healthy",
         "agent": "Alpha State",
+        "agent_loaded": chat_con_agente is not None,
         "chatwoot": "connected" if all([CHATWOOT_BASE_URL, CHATWOOT_ACCOUNT_ID, CHATWOOT_API_TOKEN]) else "not configured"
     }
 
@@ -262,13 +276,12 @@ async def test_agent(request: Request):
     if not message:
         return {"error": "Debes proporcionar un 'message' en el body"}
     
-    print(f"\n🧪 TEST - Mensaje: {message}")
-    print(f"   Session: {session_id[:8]}...")
+    logger.info("Solicitud /test recibida: caracteres=%s", len(message))
     
     try:
         load_agent()
         respuesta = chat_con_agente(message, session_id)
-        print(f"   ✅ Respuesta: {respuesta[:100]}...")
+        logger.info("/test completado: caracteres_respuesta=%s", len(respuesta))
         
         return {
             "message": message,
@@ -277,7 +290,7 @@ async def test_agent(request: Request):
             "status": "success"
         }
     except Exception as e:
-        print(f"   ❌ Error: {e}")
+        logger.exception("Error en /test")
         return {
             "message": message,
             "error": str(e),
