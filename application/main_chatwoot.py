@@ -210,7 +210,11 @@ async def chatwoot_webhook(request: Request):
         
     except Exception as e:
         print(f"   ❌ Error al procesar: {e}")
-        
+
+          # PARA VER EL DIAGNÓSTICO DETALLADO EN CLOUD RUN
+        import traceback
+        traceback.print_exc() 
+
         # Enviar mensaje de error
         error_message = "Disculpa, tuve un problema al procesar tu consulta. Un asesor te atenderá pronto."
         send_chatwoot_message(conversation_id, error_message)
