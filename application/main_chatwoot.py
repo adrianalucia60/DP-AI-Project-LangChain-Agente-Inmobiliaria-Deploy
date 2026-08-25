@@ -193,6 +193,7 @@ async def chatwoot_webhook(request: Request):
     # Procesar con el agente
     try:
         print(f"   🤖 Procesando con el agente...")
+        load_agent()
         
         # Convertir conversation_id a UUID para el historial
         session_id = conversation_id_to_uuid(conversation_id)
@@ -265,6 +266,7 @@ async def test_agent(request: Request):
     print(f"   Session: {session_id[:8]}...")
     
     try:
+        load_agent()
         respuesta = chat_con_agente(message, session_id)
         print(f"   ✅ Respuesta: {respuesta[:100]}...")
         
