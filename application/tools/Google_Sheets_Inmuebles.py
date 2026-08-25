@@ -11,6 +11,7 @@ Autor: Lic. Adriana Alvarez
 """
 
 import os
+import json
 import logging
 import unicodedata
 from typing import Optional
@@ -36,10 +37,10 @@ GOOGLE_SHEETS_HEADER_ROW = int(os.getenv("GOOGLE_SHEETS_HEADER_ROW2", "1"))
 GOOGLE_SHEETS_GROUP_ROW = int(
     os.getenv("GOOGLE_SHEETS_GROUP_ROW2", str(max(1, GOOGLE_SHEETS_HEADER_ROW - 1)))
 )
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS_FILE",
-    "credentials/service-account.json",
+GOOGLE_APPLICATION_CREDENTIALS_FILE = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS_FILE"
 )
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # Scope de SOLO LECTURA
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -71,20 +72,31 @@ def _get_worksheet():
     if _worksheet is not None:
         return _worksheet
 
-    creds_path = _resolve_credentials_path(GOOGLE_APPLICATION_CREDENTIALS)
+    credentials_value = (
+        GOOGLE_APPLICATION_CREDENTIALS_FILE
+        or GOOGLE_APPLICATION_CREDENTIALS
+        or "credentials/service-account.json"
+    )
+    credentials_info = None
+    try:
+        credentials_info = json.loads(credentials_value)
+    except (json.JSONDecodeError, TypeError):
+        creds_path = _resolve_credentials_path(credentials_value)
+
     logger.info(
-        "Conectando a Google Sheets de inmuebles: worksheet=%s header_row=%s credentials_file=%s",
+        "Conectando a Google Sheets de inmuebles: worksheet=%s header_row=%s credentials_source=%s",
         GOOGLE_SHEETS_WORKSHEET,
         GOOGLE_SHEETS_HEADER_ROW,
-        os.path.basename(creds_path),
+        "environment_json" if credentials_info else os.path.basename(creds_path),
     )
-    if not os.path.isfile(creds_path):
-        raise FileNotFoundError(
-            f"No se encontró el JSON de la cuenta de servicio en '{creds_path}'. "
-            f"Descárgalo desde Google Cloud y colócalo en esa ruta."
-        )
-
-    creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    if credentials_info:
+        creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
+    else:
+        if not os.path.isfile(creds_path):
+            raise FileNotFoundError(
+                "No se encontró el archivo JSON de credenciales de Google Sheets."
+            )
+        creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
     client = gspread.authorize(creds)
     sheet = client.open_by_key(GOOGLE_SHEET_ID)
     _worksheet = sheet.worksheet(GOOGLE_SHEETS_WORKSHEET)
